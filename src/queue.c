@@ -1,8 +1,12 @@
-/*
- * DESCRIPTION
+/* See LICENSE file for copyright and license details.
+ * queue.c
+ *
+ *  DESCRIPTION
  *
  */
 
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 

@@ -1,13 +1,15 @@
-/*
- * DESCRIPTION
+/* See LICENSE file for copyright and license details.
+ * data.c
+ *
+ *  DESCRIPTION
  *
  */
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include "logging.h"
 #include "data.h"
+#include "logging.h"
 
 
 

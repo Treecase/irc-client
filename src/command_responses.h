@@ -1,10 +1,12 @@
-/*
- * DESCRIPTION
+/* See LICENSE file for copyright and license details.
+ * command_responses.h
+ *
+ *  DESCRIPTION
  *
  */
 
-#ifndef _COMMAND_RESPONSE_DECLARATIONS_H
-#define _COMMAND_RESPONSE_DECLARATIONS_H
+#ifndef _COMMAND_RESPONSES_H
+#define _COMMAND_RESPONSES_H
 
 
 #include "data.h"

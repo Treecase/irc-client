@@ -1,15 +1,17 @@
-/*
- * These functions return response command strings based on
- * the given command message
+/* See LICENSE file for copyright and license details.
+ * command_responses.c
+ *
+ *  These functions return response command strings based on the given
+ * command message
  *
  */
 
 #include <stdlib.h>
 #include <string.h>
 
-#include "data.h"
 #include "command_responses.h"
 #include "commands.h"
+#include "data.h"
 #include "logging.h"
 
 

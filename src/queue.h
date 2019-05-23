@@ -1,14 +1,16 @@
-/*
- * DESCRIPTION
+/* See LICENSE file for copyright and license details.
+ * queue.h
+ *
+ *  DESCRIPTION
  *
  */
 
 #ifndef _QUEUE_H
 #define _QUEUE_H
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <pthread.h>
+#include <stdbool.h>
+#include <stddef.h>
 
 
 /* ==[ STRUCTS ]== */

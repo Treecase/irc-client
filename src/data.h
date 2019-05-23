@@ -1,11 +1,17 @@
-/*
- * IRC Structs/Classes
+/* See LICENSE file for copyright and license details.
+ * data.h
+ *
+ *  IRC Structs/Classes
  *
  */
 
 #ifndef _DATA_H
 #define _DATA_H
 
+#include <stddef.h>
+
+
+/* ==[ DEFINES ]== */
 #ifndef VERSION
 #error A version number is required
 #endif
@@ -17,9 +23,6 @@
 
 /* ==[ GLOBALS ]== */
 extern char const *CLIENT_NAME; /* defined in main.c */
-
-
-#include <stddef.h>
 
 
 /* ==[ STRUCTS ]== */

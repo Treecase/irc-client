@@ -1,5 +1,6 @@
+# See LICENSE file for copyright and license details.
 
-VERSION=0.0
+VERSION=0.1.0
 DEBUG=0
 
 CFLAGS=-Wall -Wextra -g -D VERSION=\"$(VERSION)\" -D DEBUG_LEVEL=$(DEBUG)

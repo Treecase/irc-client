@@ -1,5 +1,7 @@
-/*
- * Data structures/constants dealing with IRC commands
+/* See LICENSE file for copyright and license details.
+ * commands.h
+ *
+ *  Data structures/constants dealing with IRC commands
  *
  */
 
