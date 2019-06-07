@@ -10,9 +10,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
-
-#include <readline/readline.h>
-#include <readline/history.h>
+#include <string.h>
 
 #include <netdb.h>
 #include <sys/socket.h>
@@ -21,6 +19,8 @@
 
 #include "data.h"
 #include "commands.h"
+#include "gui.h"
+#include "irc_string.h"
 #include "logging.h"
 #include "net.h"
 #include "queue.h"
@@ -36,40 +36,6 @@ static MessageQueue queue;
 
 
 /* ==[ FUNCTIONS ]== */
-/* irc_command_generator: return possible IRC commands that match
- *  'text' (used by GNU Readline) */
-char *irc_command_generator (char const *text, int state)
-{
-    static size_t len;
-    static size_t idx;
-
-    if (state == 0)
-    {
-        len = strlen (text);
-        idx = 0;
-    }
-
-    while (idx < command_count)
-    {
-        char *cmd = commands[idx++].name;
-        if (strncasecmp (cmd, text, len) == 0)
-        {
-            return strdup (cmd);
-        }
-    }
-    return NULL;
-}
-
-/* irc_complete_command: return a list of possible IRC commands
- *  that match 'text' (used by GNU Readline) */
-char **irc_complete_command (char const *text, int start, int end)
-{
-    start = start;  /* shuts gcc up about unused variables */
-    end   = end;    /* shuts gcc up about unused variables */
-    rl_attempted_completion_over = 1;
-    return rl_completion_matches (text, irc_command_generator);
-}
-
 /* interpret_irc_command: interpret an IRC command message */
 void interpret_irc_command (Message cmd)
 {
@@ -97,7 +63,7 @@ void interpret_irc_command (Message cmd)
         if (response != NULL)
         {
             debug ("responding with '%s'", response);
-            queue_push (&queue, response);
+            msg_queue_push (&queue, response);
         }
     }
     /* we did not match an IRC command */
@@ -111,18 +77,25 @@ void interpret_irc_command (Message cmd)
          * a numeric response */
         if (*end == '\0')
         {
-            debug ("numeric response: %ld\n", numeric);
-            /* don't print the first parameter of a numeric response,
-             * as it's just our username */
+            debug ("numeric response: %ld", numeric);
+
+            String out = string_new();
+
+            /* i starts at 1 because the 1st param of a numeric
+             * response is always just your username */
             for (size_t i = 1; i < cmd.param_count; ++i)
             {
-                printf ("%s", cmd.params[i]);
-                if (i < cmd.param_count-1)
-                {
-                    printf (" ");
-                }
+                int add = snprintf (NULL, 0, "%s ", cmd.params[i]);
+                char *new = calloc (sizeof(*new), add + 1);
+                sprintf (new, "%s ", cmd.params[i]);
+
+                string_add (&out, new);
             }
-            printf ("\n");
+
+            if (out.length > 0)
+            {
+                gui_user_print ("%s\n", out.str);
+            }
         }
         /* we failed to parse a number, so we've received
          * an invalid message from the server */
@@ -188,9 +161,7 @@ void *socket_read_and_write (void *sockfd_addr)
                 /* 'msg' is not NULL, so no error occurred */
                 if (msg != NULL)
                 {
-                    debug ("RECEIVED: '%.*s'",
-                           (int)(strlen (msg)-2),
-                           msg);
+                    debug ("RECEIVED: \"%s\"", msg);
                     Message message = str_to_message (msg);
                     interpret_irc_command (message);
 
@@ -207,10 +178,10 @@ void *socket_read_and_write (void *sockfd_addr)
             if (FD_ISSET(sockfd, &writefds_tmp))
             {
                 /* there is a message in the queue, so send it */
-                if (queue_empty (&queue) == false)
+                if (msg_queue_empty (&queue) == false)
                 {
                     debug ("write possible");
-                    char *msg = queue_next (&queue);
+                    char *msg = msg_queue_next (&queue);
                     debug ("SENDING '%.*s'",
                            (int)(strlen (msg)-2),
                            msg);
@@ -232,28 +203,14 @@ void *read_user_input (void *dummy)
     bool running = true;
     for(; running;)
     {
-        char *user_in = readline (" >");
+        char *user_in = gui_user_read();
 
-        /* readline returns NULL on ^D, so if the result is not
-         * NULL, it's a command */
+        /* gui_user_read returns NULL on ^D, so if the
+         * result is not NULL, it's a command */
         if (user_in != NULL)
         {
-            int old_pos = where_history(),
-                idx     = 0;
 
-            /* if the user's input is already in the
-             * history, remove the old entry for it */
-            if ((idx = history_search (user_in, 0)) != -1)
-            {
-                free_history_entry (remove_history (idx));
-            }
-
-            /* add user's input to the readline history */
-            add_history (user_in);
-            history_set_pos (old_pos);
-
-
-            /* add the CRLF message ending */
+            /* add the CRLF IRC command trailer */
             size_t len = strlen (user_in);
             char *cmd = calloc (sizeof(*cmd),
                                 len + 3);
@@ -263,10 +220,9 @@ void *read_user_input (void *dummy)
             cmd[len+2] = '\0';
 
             /* add the command to the queue */
-            queue_push (&queue, cmd);
+            msg_queue_push (&queue, cmd);
 
             free (cmd);
-            free (user_in);
         }
         /* user entered ^D, so we'll exit */
         else
@@ -283,12 +239,6 @@ void *read_user_input (void *dummy)
 /* Simple IRC Client */
 int main (int argc, char *argv[])
 {
-    /* initialize GNU Readline */
-    rl_readline_name = "IRC";
-    rl_attempted_completion_function = irc_complete_command;
-    using_history();
-
-
     /* the program's name */
     CLIENT_NAME = argv[0];
 
@@ -351,13 +301,18 @@ int main (int argc, char *argv[])
     }
 
 
+    /* start the GUI */
+    gui_init();
+
     /* create the message queue */
-    queue = queue_new (sockfd);
+    queue = msg_queue_new (sockfd);
 
     /* user registration commands */
-    queue_push (&queue, "PASS very_secret_password\r\n");
-    queue_push (&queue, "NICK user_name\r\n");
-    queue_push (&queue, "USER user_name 0 * :RealName\r\n");
+    msg_queue_push (&queue, "CAP LS\r\n");
+    msg_queue_push (&queue, "CAP END\r\n");
+    msg_queue_push (&queue, "PASS very_secret_password\r\n");
+    msg_queue_push (&queue, "NICK user_name\r\n");
+    msg_queue_push (&queue, "USER user_name 0 * :RealName\r\n");
 
 
     /* we use two threads, one for user input, and one for
@@ -381,14 +336,23 @@ int main (int argc, char *argv[])
      * (eg. if it encounters an error) */
     /* TODO: kill threads on signal exits (eg. SIGINT, etc.) */
     pthread_join (user_io_thread, NULL);
+
+    msg_queue_push (&queue, "QUIT :Goodbye.\r\n");
+    /* idle until the QUIT message is sent */
+    /* TODO: don't use a while loop! */
+    while (!msg_queue_empty (&queue))
+    {
+    }
     pthread_cancel (socket_io_thread);
 
     /* free the message queue */
-    queue_delete (&queue);
+    msg_queue_delete (&queue);
     /* free the server info struct */
     freeaddrinfo (server_info);
     /* close the socket */
     close (sockfd);
+
+    gui_shutdown();
 
     return EXIT_SUCCESS;
 }

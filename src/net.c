@@ -15,6 +15,7 @@
 #include <sys/types.h>
 
 #include "net.h"
+#include "irc_string.h"
 #include "logging.h"
 
 
@@ -47,12 +48,12 @@ int get_byte_from_inet (int fd)
 
     int status = recv (fd, &out, sizeof(out), 0);
 
-    /* error */
+    /* an error occurred */
     if (status == -1)
     {
         error ("recv failed -- %s", strerror (errno));
     }
-    /* connection closed */
+    /* the connection was closed */
     else if (status == 0)
     {
         error ("connection closed");
@@ -68,28 +69,25 @@ int get_byte_from_inet (int fd)
 /* receive_message: receive an IRC message from the Internet */
 char *receive_message (int fd)
 {
-    size_t out_len  = 100,
-           out_idx  = 0;
-    char  *out      = calloc (sizeof(*out), out_len);
-
+    String out = string_new();
 
     int received = get_byte_from_inet (fd);
     bool hit_message_end = false;
     while (received != -1 && hit_message_end == false)
     {
-        if (out_idx >= out_len)
-        {
-            out = realloc (out, sizeof(*out) * (out_len * 2));
-            out_len *= 2;
-        }
+        string_add_ch (&out, received);
 
-        out[out_idx++] = (unsigned char)received;
-        if (out_idx > 0)
+        if (out.length >= 2)
         {
-            if (out[out_idx-2] == '\r' && out[out_idx-1] == '\n')
+            /* commands end with CRLF */
+            if (out.str[out.length - 2] == '\r'
+             && out.str[out.length - 1] == '\n')
             {
                 hit_message_end = true;
-                out_idx -= 2;
+
+                /* remove the CRLF from our return value */
+                out.length -= 2;
+                out.str[out.length] = '\0';
                 break;
             }
         }
@@ -99,12 +97,11 @@ char *receive_message (int fd)
     /* some error occurred */
     if (received == -1)
     {
-        free (out);
+        string_delete (&out);
         return NULL;
     }
 
 
-    out = realloc (out, sizeof(*out) * out_idx);
-    return out;
+    return out.str;
 }
 

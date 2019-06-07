@@ -15,8 +15,9 @@
 
 
 
+/* Queue */
 /* queue_push: add an item to the queue */
-void queue_push (MessageQueue *q, char const *const msg)
+void queue_push (Queue *q, char const *const msg)
 {
     pthread_mutex_lock (&q->mutex);
 
@@ -28,9 +29,6 @@ void queue_push (MessageQueue *q, char const *const msg)
 
     q->queue[q->end] = q_new;
     q->end = (q->end + 1) % q->size;
-
-    /* start listening for write events if we weren't already */
-    FD_SET(q->sockfd, &q->write_fds);
 
     /* the queue is full; we have to alloc more space */
     if (q->end == q->start)
@@ -60,7 +58,7 @@ void queue_push (MessageQueue *q, char const *const msg)
 
 /* queue_next: get the next item from the queue
  *  - returns NULL if the queue is empty */
-char *queue_next (MessageQueue *q)
+char *queue_next (Queue *q)
 {
     pthread_mutex_lock (&q->mutex);
 
@@ -77,12 +75,6 @@ char *queue_next (MessageQueue *q)
         free (q->queue[q->start]);
         q->queue[q->start] = NULL;
         q->start = (q->start + 1) % q->size;
-
-        /* stop listening for write events if the queue is empty */
-        if (queue_empty (q))
-        {
-            FD_CLR(q->sockfd, &q->write_fds);
-        }
     }
 
     pthread_mutex_unlock (&q->mutex);
@@ -91,21 +83,18 @@ char *queue_next (MessageQueue *q)
 
 /* queue_empty: check if the queue is empty */
 /* TODO: (does this need to be mutex'd?) */
-bool queue_empty (MessageQueue const *const restrict q)
+bool queue_empty (Queue const *const restrict q)
 {
     return q->start == q->end;;
 }
 
 
 /* queue_new: allocate a new queue */
-MessageQueue queue_new (int fd)
+Queue queue_new(void)
 {
     static size_t const QUEUE_INITIAL_SIZE = 4;
 
-    MessageQueue out = { 0 };
-
-    out.sockfd = fd;
-    FD_ZERO (&out.write_fds);
+    Queue out = { 0 };
 
     out.start = 0;
     out.end   = 0;
@@ -113,13 +102,23 @@ MessageQueue queue_new (int fd)
 
     out.queue = calloc (sizeof(*out.queue), out.size);
 
+    pthread_mutexattr_t attr;
+    if (pthread_mutexattr_init (&attr) == -1)
+    {
+        fatal ("pthread_mutexattr_init failed");
+    }
+    if (pthread_mutex_init (&out.mutex, &attr) == -1)
+    {
+        fatal ("pthread_mutex_init failed");
+    }
+
     return out;
 }
 
 /* queue_delete: free memory used by the queue */
-void queue_delete (MessageQueue *q)
+void queue_delete (Queue *q)
 {
-    pthread_mutex_unlock (&q->mutex);
+    pthread_mutex_lock (&q->mutex);
 
     for (size_t i = 0; i < q->size; ++i)
     {
@@ -132,8 +131,85 @@ void queue_delete (MessageQueue *q)
     q->size  = 0;
     q->end   = 0;
     q->start = 0;
+
+    pthread_mutex_unlock (&q->mutex);
+}
+/* END Queue */
+
+
+
+/* MessageQueue */
+/* queue_push: add an item to the queue */
+void msg_queue_push (MessageQueue *q, char const *const msg)
+{
+    pthread_mutex_lock (&q->mutex);
+
+    /* start listening for write events if we weren't already */
+    FD_SET(q->sockfd, &q->write_fds);
+
+    queue_push (&q->queue, msg);
+
+    pthread_mutex_unlock (&q->mutex);
+}
+
+/* queue_next: get the next item from the queue
+ *  - returns NULL if the queue is empty */
+char *msg_queue_next (MessageQueue *q)
+{
+    pthread_mutex_lock (&q->mutex);
+
+    char *out = queue_next (&q->queue);
+
+    /* stop listening for write events if the queue is empty */
+    if (msg_queue_empty (q))
+    {
+        FD_CLR(q->sockfd, &q->write_fds);
+    }
+
+    pthread_mutex_unlock (&q->mutex);
+    return out;
+}
+
+/* queue_empty: check if the queue is empty */
+/* TODO: (does this need to be mutex'd?) */
+bool msg_queue_empty (MessageQueue const *const restrict q)
+{
+    return q->queue.start == q->queue.end;
+}
+
+
+/* queue_new: allocate a new queue */
+MessageQueue msg_queue_new (int fd)
+{
+    MessageQueue out = { 0 };
+
+    out.sockfd = fd;
+    FD_ZERO (&out.write_fds);
+
+    out.queue = queue_new();
+
+    pthread_mutexattr_t attr;
+    if (pthread_mutexattr_init (&attr) == -1)
+    {
+        fatal ("pthread_mutexattr_init failed");
+    }
+    if (pthread_mutex_init (&out.mutex, &attr) == -1)
+    {
+        fatal ("pthread_mutex_init failed");
+    }
+
+    return out;
+}
+
+/* queue_delete: free memory used by the queue */
+void msg_queue_delete (MessageQueue *q)
+{
+    pthread_mutex_lock (&q->mutex);
+
+    queue_delete (&q->queue);
     q->sockfd = -1;
 
     pthread_mutex_unlock (&q->mutex);
 }
+/* END MessageQueue */
 

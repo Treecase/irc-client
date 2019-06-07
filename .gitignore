@@ -4,3 +4,5 @@ cmds.txt
 response.txt
 src/dep
 src/obj
+out.txt
+*.swp

@@ -74,6 +74,9 @@ char *response_WALLOPS (Message msg);
 char *response_USERHOST (Message msg);
 char *response_ISON (Message msg);
 
+/* CAP */
+char *response_CAP (Message msg);
+
 
 #endif
 

@@ -11,7 +11,7 @@
 #include <stdio.h>
 
 
-#if !DEBUG_LEVEL == 0
+#if DEBUG_LEVEL != 0
 #define debug(fmt, ...)     ({ fprintf (stderr,\
                                         "Debug: %s -- " fmt "\n",\
                                         __func__, ##__VA_ARGS__); })

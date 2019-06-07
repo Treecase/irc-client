@@ -5,10 +5,12 @@
  *
  */
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "data.h"
+#include "irc_string.h"
 #include "logging.h"
 
 
@@ -32,7 +34,7 @@ char *read_until_space (char const *const str, size_t *chars_read)
     }
 
     out = calloc (sizeof(*out), space_idx + 1);
-    memcpy (out, str, space_idx + 1);
+    memcpy (out, str, space_idx);
     out[space_idx] = '\0';
 
     *chars_read = space_idx;
@@ -47,52 +49,34 @@ char *read_until_space (char const *const str, size_t *chars_read)
  *                 CRLF message ending */
 char *message_to_str (Message msg)
 {
-    char *str = NULL;
-    size_t str_len = 0;
+    String str = string_new();
 
     /* add the prefix to the string */
     if (msg.prefix != NULL)
     {
-        size_t prefix_len = strlen (msg.prefix) + 1;
-
-        str = realloc (str, str_len + prefix_len);
-        str[0] = ':';
-        memcpy (str + 1, msg.prefix, prefix_len - 1);
-
-        str_len += prefix_len;
+        string_add (&str, ":");
+        string_add (&str, msg.prefix);
     }
 
     /* add the command to the string */
-    size_t msg_len = strlen (msg.command);
-    str = realloc (str, str_len + msg_len);
-    memcpy (str + str_len, msg.command, msg_len);
-    str_len += msg_len;
+    string_add (&str, msg.command);
 
     /* add the params to the string */
     for (size_t i = 0; i < msg.param_count; ++i)
     {
-        size_t param_len = strlen (msg.params[i]);
-
-        str = realloc (str, str_len + param_len + 1);
-        str[str_len] = ' ';
-        memcpy (str + str_len + 1, msg.params[i], param_len);
-
-        str_len += param_len + 1;
+        string_add (&str, " ");
+        string_add (&str, msg.params[i]);
     }
 
     /* add the terminating CRLF */
-    str = realloc (str, str_len + 3);
-    str_len += 3;
-    str[str_len-3] = '\r';
-    str[str_len-2] = '\n';
-    str[str_len-1] = '\0';
+    string_add (&str, "\r\n");
 
-    if (str_len > 512)
+    if (str.length > 512)
     {
         error ("messages cannot exceed 512 characters!"\
-               "(message is %lu chars long)", str_len);
+               "(message is %lu chars long)", str.length);
     }
-    return str;
+    return str.str;
 }
 
 /* str_to_message: convert a string into a message */
@@ -102,6 +86,7 @@ Message str_to_message (char const *const str)
     size_t str_len = strlen (str),
            str_idx = 0;
 
+    /* prefix */
     if (str[0] == ':')
     {
         str_idx += 1;
@@ -111,24 +96,28 @@ Message str_to_message (char const *const str)
         msg.prefix = read_until_space (str + str_idx, &chars_read);
         str_idx += chars_read + 1;
 
-        debug ("prefix is '%s'", msg.prefix);
+        debug ("prefix is \"%s\"", msg.prefix);
     }
 
+    /* command */
     size_t chars_read = 0;
     msg.command = read_until_space (str + str_idx, &chars_read);
     str_idx += chars_read + 1;
 
-    debug ("command is '%s'", msg.command);
+    debug ("command is \"%s\"", msg.command);
 
-    msg.params = calloc (sizeof(*msg.params), 15);
+    /* parameters */
+    size_t allocated = 15;
+    msg.params = calloc (sizeof(*msg.params), allocated);
+    msg.param_count = 0;
 
-    size_t param_count = 0;
     while (str_idx < str_len)
     {
-        if (param_count >= 15)
+        if (msg.param_count >= allocated)
         {
-            error ("too many parameters! (%lu/15)", param_count);
-            break;
+            allocated *= 2;
+            msg.params = realloc (msg.params,
+                sizeof(*msg.params) * allocated);
         }
 
         size_t chars_read = 0;
@@ -140,31 +129,27 @@ Message str_to_message (char const *const str)
         if (param[0] == ':')
         {
             free (param);
-            /* skip the leading ':' */
+            /* skip the ':' */
             str_idx++;
 
-            chars_read = str_len - str_idx - 2;
+            chars_read = str_len - str_idx;
+
             param = calloc (sizeof(*param), chars_read + 1);
 
-            /* we only copy `str_len - str_idx - 2` characters
-             * so that the terminating CRLF is not included */
             memcpy (param, str + str_idx, chars_read);
             param[chars_read] = '\0';
-
-            chars_read += 2;
         }
 
         str_idx += chars_read + 1;
 
-        msg.params[param_count] = param;
-        debug ("param[%lu] is '%s'", param_count, param);
+        msg.params[msg.param_count] = param;
+        debug ("param[%lu] is \"%s\"", msg.param_count, param);
 
-        param_count++;
+        msg.param_count++;
     }
 
     msg.params = realloc (msg.params,
-                          sizeof(*msg.params) * param_count);
-    msg.param_count = param_count;
+        sizeof(*msg.params) * msg.param_count);
     return msg;
 }
 

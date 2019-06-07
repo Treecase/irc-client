@@ -1,0 +1,65 @@
+
+
+2019-jun-06  Trevor Last  <trevorclast@gmail.com>
+
+Version 0.2.0. This version adds compile-time-selectable GUI options, with an
+NCurses interface being the default. Additionally, it adds support for the IRC
+CAP function for registering capabilities.
+
+* Changelog: Added.
+
+* Makefile (VERSION): Increment minor version to 0.2.0
+
+(GUI): Added. Used to select which GUI file to use (currently, `curses' and
+`term' are supported, with `curses' being default)
+
+(EXTRA): Added. Currently used to hold the -D flags to the compiler. Added to
+all CC rules.
+
+(OBJDIR) (DEPDIR): Added rules to create the OBJDIR/gui and DEPDIR/gui
+directories.
+
+* command_responses.c (response_*): Added `cmd = cmd;' to all functions that
+don't use `cmd' (just to shut the compiler up).
+(response_NOTICE): Implemented; prints all but the first param to user_out.
+
+(CAP_response_*): Added, for CAP functionality support.
+(CAP_response_LS): Implemented; prints returned capabilities to user_out.
+(response_CAP): Implemented; calls the appropriate CAP_response function.
+
+* command_responses.h (response_CAP): Added declaration.
+
+* commands.h (commands): Added CAP.
+
+(str_to_message): Supports having more than 15 parameters.
+
+* main.c (interpret_irc_command) (socket_read_write) (read_user_input) (main):
+Replaced `printf' with `gui_user_print', `readline' with `gui_user_read'.
+
+(main): Added CAP interactions to user registration section.
+
+* queue.h (Queue): Implemented. Used as a generic queue structure.
+(MessageQueue): Moved generic queue functionality out of MessageQueue and into
+Queue. MessageQueue is used only for the specific case of needing to sync a
+file descriptor with the queue.
+
+* queue.c (queue_*): Changed, these now deal with the generic Queue structure
+rather than the MessageQueue structure. All callers changed.
+(msg_queue_*): Added; same as their `queue_XXX' equivalents, but dealing with
+a MessageQueue instead of a Queue.
+
+* irc_string.h (String): Added. Quick-and-dirty implementation of a string,
+with an append method, etc. Should cut down on mistakes made when working with
+strings.
+(string_new) (string_delete) (string_add) (string_add_ch): Added declaration.
+
+* irc_string.c (string_new) (string_delete) (string_add) (string_add_ch):
+Added.
+
+* gui.h (gui_shutdown) (gui_init) (gui_user_print) (gui_debug_print)
+(gui_user_read): Added declarations.
+
+* gui/curses.c: Implemented an interface using NCurses.
+
+* gui/term.c: Implemented an interface using GNU readline.
+
