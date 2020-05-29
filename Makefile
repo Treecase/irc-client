@@ -1,11 +1,10 @@
 # See LICENSE file for copyright and license details.
 
-GUI=curses
-VERSION=0.2.0
-DEBUG=0
+VERSION=0.3.0
+DEBUG=1
 
-CFLAGS=-Wall -Wextra -g
-LDFLAGS=-lreadline -lpthread
+CXXFLAGS=-Wall -Wextra -g
+LDFLAGS=-lpanel -lncurses
 EXTRA=-D VERSION=\"$(VERSION)\" -D DEBUG_LEVEL=$(DEBUG)
 
 
@@ -13,50 +12,40 @@ SRCDIR=src
 OBJDIR=$(SRCDIR)/obj
 DEPDIR=$(SRCDIR)/dep
 
-SRC=$(wildcard $(SRCDIR)/*.c)
-OBJ=$(subst $(SRCDIR),$(OBJDIR),$(SRC:.c=.o))
-DEP=$(subst $(SRCDIR),$(DEPDIR),$(SRC:.c=.d))
-
-ifeq ($(GUI), curses)
-  LDFLAGS += -lncurses
-  SRC += $(SRCDIR)/gui/curses.c
-else
-  SRC += $(SRCDIR)/gui/term.c
-  OBJ += $(OBJDIR)/gui/term.o
-  DEP += $(DEPDIR)/gui/term.d
-endif
+SRC=$(wildcard $(SRCDIR)/*.cpp) $(SRCDIR)/gui/curses.cpp
+OBJ=$(addprefix $(OBJDIR)/,$(notdir $(SRC:.cpp=.o)))
+DEP=$(addprefix $(DEPDIR)/,$(notdir $(SRC:.cpp=.d)))
 
 
+
+
+all : irc
 
 irc : $(OBJ)
-	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@ $(EXTRA)
+	$(CXX) $^ $(CXXFLAGS) $(LDFLAGS) -o $@ $(EXTRA)
 
 include $(DEP)
 
 
-$(OBJDIR)/%.o : $(SRCDIR)/%.c
-	$(CC) -c $< $(CFLAGS) $(LDFLAGS) -o $@ $(EXTRA)
+$(OBJDIR)/%.o : $(SRCDIR)/%.cpp
+	$(CXX) -c $< $(CXXFLAGS) $(LDFLAGS) -o $@ $(EXTRA)
 
-$(OBJDIR)/gui/%.o : $(SRCDIR)/gui/%.c
-	$(CC) -c $< $(CFLAGS) $(LDFLAGS) -o $@ $(EXTRA)
+$(OBJDIR)/curses.o : $(SRCDIR)/gui/curses.cpp
+	$(CXX) -c $< $(CXXFLAGS) $(GUI_LDFLAGS) -o $@ $(EXTRA)
 
-$(DEPDIR)/%.d : $(SRCDIR)/%.c
-	$(CC) $^ $(CFLAGS) $(LDFLAGS) -MM -MT $(subst $(DEPDIR),$(OBJDIR),$(@:.d=.o)) -MF $@ $(EXTRA)
+$(DEPDIR)/%.d : $(SRCDIR)/%.cpp
+	$(CXX) $^ $(CXXFLAGS) $(LDFLAGS) -MM -MT $(subst $(DEPDIR),$(OBJDIR),$(@:.d=.o)) -MF $@ $(EXTRA)
 
-$(DEPDIR)/gui/%.d : $(SRCDIR)/gui/%.c
-	$(CC) $^ $(CFLAGS) $(LDFLAGS) -MM -MT $(subst $(DEPDIR),$(OBJDIR),$(@:.d=.o)) -MF $@ $(EXTRA)
+$(DEPDIR)/curses.d : $(SRCDIR)/gui/curses.cpp
+	$(CXX) $^ $(CXXFLAGS) $(GUI_LDFLAGS) -MM -MT $(subst $(DEPDIR),$(OBJDIR),$(@:.d=.o)) -MF $@ $(EXTRA)
 
-$(OBJ) :|$(OBJDIR) $(OBJDIR)/gui
-$(DEP) :|$(DEPDIR) $(DEPDIR)/gui
+$(OBJ) :|$(OBJDIR)
+$(DEP) :|$(DEPDIR)
 
 $(OBJDIR) :
 	@mkdir $(OBJDIR)
-$(OBJDIR)/gui :
-	@mkdir $(OBJDIR)/gui
 $(DEPDIR) :
 	@mkdir $(DEPDIR)
-$(DEPDIR)/gui :
-	@mkdir $(DEPDIR)/gui
 
 .PHONY: clean
 clean:

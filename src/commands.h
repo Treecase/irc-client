@@ -1,4 +1,5 @@
-/* See LICENSE file for copyright and license details.
+/* Copyright (C) 2019-2020 Trevor Last
+ * See LICENSE file for copyright and license details.
  * commands.h
  *
  *  Data structures/constants dealing with IRC commands
@@ -8,12 +9,12 @@
 #ifndef _COMMANDS_H
 #define _COMMANDS_H
 
-
-#include "command_responses.h"
+#include <string>
+#include <vector>
 
 
 /* Responses:
- *  DESCRIPTION
+ *  Numeric responses to IRC messages
  */
 typedef enum Responses
 {
@@ -181,76 +182,73 @@ typedef enum Responses
  */
 typedef struct CommandSpec
 {
-    char *name;
+    std::string name;
     size_t param_count,
            optional_param_count;
-    char *(*response) (Message);
 } CommandSpec;
 
 
-static CommandSpec const commands[] =
- {
+/* List of IRC commands */
+static std::vector<CommandSpec> const irc_commands =
+{
     /* Connection Registration */
-    { "PASS",       1,  0,  response_PASS,     },
-    { "NICK",       1,  0,  response_NICK,     },
-    { "USER",       4,  0,  response_USER,     },
-    { "OPER",       2,  0,  response_OPER,     },
-    { "MODE",       2,  0,  response_MODE,     },
-    { "SERVICE",    6,  0,  response_SERVICE,  },
-    { "QUIT",       0,  1,  response_QUIT,     },
-    { "SQUIT",      2,  0,  response_SQUIT,    },
+    { "PASS",       1,  0, },
+    { "NICK",       1,  0, },
+    { "USER",       4,  0, },
+    { "OPER",       2,  0, },
+    { "MODE",       2,  0, },
+    { "SERVICE",    6,  0, },
+    { "QUIT",       0,  1, },
+    { "SQUIT",      2,  0, },
     /* Channel Operations */
-    { "JOIN",       1,  1,  response_JOIN,     },
-    { "PART",       1,  1,  response_PART,     },
-    { "MODE",       2,  0,  response_MODE_ch,  },
-    { "TOPIC",      1,  1,  response_TOPIC,    },
-    { "NAMES",      0,  2,  response_NAMES,    },
-    { "LIST",       0,  2,  response_LIST,     },
-    { "INVITE",     2,  0,  response_INVITE,   },
-    { "KICK",       4,  1,  response_KICK,     },
+    { "JOIN",       1,  1, },
+    { "PART",       1,  1, },
+    { "MODE",       2,  0, },
+    { "TOPIC",      1,  1, },
+    { "NAMES",      0,  2, },
+    { "LIST",       0,  2, },
+    { "INVITE",     2,  0, },
+    { "KICK",       4,  1, },
     /* Message Sending */
-    { "PRIVMSG",    2,  0,  response_PRIVMSG,  },
-    { "NOTICE",     2,  0,  response_NOTICE,   },
+    { "PRIVMSG",    2,  0, },
+    { "NOTICE",     2,  0, },
     /* Server Queries */
-    { "MOTD",       0,  1,  response_MOTD,     },
-    { "LUSERS",     0,  2,  response_LUSERS,   },
-    { "VERSION",    0,  1,  response_VERSION,  },
-    { "STATS",      0,  2,  response_STATS,    },
-    { "LINKS",      0,  2,  response_LINKS,    },
-    { "TIME",       0,  1,  response_TIME,     },
-    { "CONNECT",    2,  1,  response_CONNECT,  },
-    { "TRACE",      0,  1,  response_TRACE,    },
-    { "ADMIN",      0,  1,  response_ADMIN,    },
-    { "INFO",       0,  1,  response_INFO,     },
+    { "MOTD",       0,  1, },
+    { "LUSERS",     0,  2, },
+    { "VERSION",    0,  1, },
+    { "STATS",      0,  2, },
+    { "LINKS",      0,  2, },
+    { "TIME",       0,  1, },
+    { "CONNECT",    2,  1, },
+    { "TRACE",      0,  1, },
+    { "ADMIN",      0,  1, },
+    { "INFO",       0,  1, },
     /* Service Queries */
-    { "SERVLIST",   0,  2,  response_SERVLIST, },
-    { "SQUERY",     2,  0,  response_SQUERY,   },
+    { "SERVLIST",   0,  2, },
+    { "SQUERY",     2,  0, },
     /* User Queries */
-    { "WHO",        0,  2,  response_WHO,      },
-    { "WHOIS",      1,  1,  response_WHOIS,    },
-    { "WHOWAS",     1,  2,  response_WHOWAS,   },
+    { "WHO",        0,  2, },
+    { "WHOIS",      1,  1, },
+    { "WHOWAS",     1,  2, },
     /* Misc. */
-    { "KILL",       2,  0,  response_KILL,     },
-    { "PING",       1,  1,  response_PING,     },
-    { "PONG",       1,  1,  response_PONG,     },
-    { "ERROR",      1,  0,  response_ERROR,    },
+    { "KILL",       2,  0, },
+    { "PING",       1,  1, },
+    { "PONG",       1,  1, },
+    { "ERROR",      1,  0, },
     /* Optional Features */
-    { "AWAY",       0,  1,  response_AWAY,     },
-    { "REHASH",     0,  0,  response_REHASH,   },
-    { "DIE",        0,  0,  response_DIE,      },
-    { "RESTART",    0,  0,  response_RESTART,  },
-    { "SUMMON",     1,  2,  response_SUMMON,   },
-    { "USERS",      0,  1,  response_USERS,    },
-    { "WALLOPS",    1,  0,  response_WALLOPS,  },
-    { "USERHOST",   1,  4,  response_USERHOST, },
-    { "ISON",       1, 14,  response_ISON,     },
+    { "AWAY",       0,  1, },
+    { "REHASH",     0,  0, },
+    { "DIE",        0,  0, },
+    { "RESTART",    0,  0, },
+    { "SUMMON",     1,  2, },
+    { "USERS",      0,  1, },
+    { "WALLOPS",    1,  0, },
+    { "USERHOST",   1,  4, },
+    { "ISON",       1, 14, },
 
     /* CAP */
-    { "CAP",        0,  0,  response_CAP,      },
- };
-
-static size_t const command_count =\
-                        sizeof(commands) / sizeof(*commands);
+    { "CAP",        0,  0, },
+};
 
 
 #endif

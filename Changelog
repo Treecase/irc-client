@@ -1,4 +1,14 @@
 
+2020-may-29  Trevor Last  <trevorclast@gmail.com>
+
+Version 0.3.0. Rewritten in C++. In this version, typed input is interpreted
+as a message to send to the channel, rather than an IRC command. To send IRC
+commands, you must prefix the command with '/QUOTE'. Additionally, joining a
+channel and leaving a channel can be accomplished using the '/JOIN' and
+'/PART' commands. Typing '/QUIT' or entering a ^D with an empty input exits
+the program.
+
+
 
 2019-jun-06  Trevor Last  <trevorclast@gmail.com>
 

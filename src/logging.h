@@ -1,7 +1,8 @@
-/* See LICENSE file for copyright and license details.
+/* Copyright (C) 2019-2020 Trevor Last
+ * See LICENSE file for copyright and license details.
  * logging.h
  *
- *  DESCRIPTION
+ *  Debugging/logging macros
  *
  */
 
@@ -11,21 +12,51 @@
 #include <stdio.h>
 
 
+extern FILE *G_logfile;
+
 #if DEBUG_LEVEL != 0
-#define debug(fmt, ...)     ({ fprintf (stderr,\
-                                        "Debug: %s -- " fmt "\n",\
-                                        __func__, ##__VA_ARGS__); })
+#define debug(fmt, ...)                 \
+    ({                                  \
+        fprintf(                        \
+            G_logfile,                  \
+            "Debug: %s -- " fmt "\n",   \
+            __func__,                   \
+            ##__VA_ARGS__);             \
+    })
 #else
-#define debug(fmt, ...)     ({ snprintf (NULL, 0, fmt, ##__VA_ARGS__); })
+#define debug(fmt, ...)                         \
+    ({                                          \
+        snprintf(NULL, 0, fmt, ##__VA_ARGS__);  \
+    })
 #endif
 
-#define error(fmt, ...)     ({ fprintf (stderr,\
-                                        "Error: %s -- " fmt "\n",\
-                                        __func__, ##__VA_ARGS__); })
-#define fatal(fmt, ...)     ({ fprintf (stderr,\
-                                        "Fatal: %s -- " fmt "\n",\
-                                        __func__, ##__VA_ARGS__);\
-                               exit (EXIT_FAILURE); })
+#define warn(fmt, ...)                  \
+    ({                                  \
+        fprintf(                        \
+            G_logfile,                  \
+            "Warning: %s -- " fmt "\n", \
+            __func__,                   \
+            ##__VA_ARGS__);             \
+    })
+
+#define error(fmt, ...)                 \
+    ({                                  \
+        fprintf(                        \
+            G_logfile,                  \
+            "Error: %s -- " fmt "\n",   \
+            __func__,                   \
+            ##__VA_ARGS__);             \
+    })
+
+#define fatal(fmt, ...)                 \
+    ({                                  \
+        fprintf(                        \
+            G_logfile,                  \
+            "Fatal: %s -- " fmt "\n",   \
+            __func__,                   \
+            ##__VA_ARGS__);             \
+        exit(EXIT_FAILURE);             \
+    })
 
 
 #endif

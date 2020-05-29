@@ -1,8 +1,6 @@
 irc
 notes/
-cmds.txt
-response.txt
 src/dep
 src/obj
-out.txt
+*.log
 *.swp

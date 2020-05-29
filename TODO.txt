@@ -1,0 +1,4 @@
+
+* Tabs for different channels
+* Chat message wrapping (or a way to scroll left/right?)
+
