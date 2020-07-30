@@ -1,9 +1,7 @@
 /* Copyright (C) 2019-2020 Trevor Last
  * See LICENSE file for copyright and license details.
- * main.c
  *
  *  A Simple IRC Client
- *
  */
 
 #include "commands.h"
@@ -25,6 +23,7 @@
 
 #include <memory>
 #include <stdexcept>
+#include <system_error>
 
 
 
@@ -45,7 +44,9 @@ int get_tcp_socket(std::string hostname, std::string port_number)
         &server_info);
     if (status != 0)
     {
-        fatal("addrinfo failed -- %s", gai_strerror(status));
+        throw std::runtime_error(
+            "addrinfo failed -- "
+            + std::string(gai_strerror(status)));
     }
 
     /* create the socket */
@@ -56,7 +57,10 @@ int get_tcp_socket(std::string hostname, std::string port_number)
         server_info->ai_protocol);
     if (fd == -1)
     {
-        fatal("socket failed -- %s", strerror(errno));
+        throw std::system_error(
+            errno,
+            std::generic_category(),
+            "socket() failed");
     }
 
     /* connect to the server */
@@ -67,7 +71,10 @@ int get_tcp_socket(std::string hostname, std::string port_number)
         server_info->ai_addrlen);
     if (status != 0)
     {
-        fatal("connect failed -- %s", strerror(errno));
+        throw std::system_error(
+            errno,
+            std::generic_category(),
+            "connect() failed");
     }
 
     freeaddrinfo(server_info);
@@ -208,7 +215,10 @@ void client(
 
         if (ret == -1)
         {
-            fatal("poll: %s", strerror(errno));
+            throw std::system_error(
+                errno,
+                std::generic_category(),
+                "poll() failed");
         }
         else if (ret > 0)
         {

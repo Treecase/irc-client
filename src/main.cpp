@@ -1,9 +1,7 @@
 /* Copyright (C) 2020 Trevor Last
  * See LICENSE file for copyright and license details.
- * main.cpp
  *
  *  IRC
- *
  */
 
 #define LOGFILE G_logfile
@@ -41,11 +39,13 @@ void gui(
 
 
 /* declared in data.h */
-char const *CLIENT_NAME = NULL;
+char const *CLIENT_NAME = nullptr;
 
 /* declared in logging.h */
 FILE *G_logfile = nullptr;
 
+
+static pid_t pid = 0;
 
 
 /* atexit callback */
@@ -56,6 +56,16 @@ void cleanup_func(void)
         fclose(G_logfile);
         G_logfile = nullptr;
     }
+    if (pid != 0)
+    {
+        kill(pid, SIGTERM);
+    }
+}
+
+/* SIGCHLD handler */
+void parent_sigchldaction(int sig, siginfo_t *info, void *ucontext)
+{
+    exit(info->si_status);
 }
 
 
@@ -93,7 +103,7 @@ int main(int argc, char *argv[])
     size_t colon = hostname_and_port.rfind(':');
     if (colon != std::string::npos)
     {
-        port = hostname_and_port.substr(colon);
+        port = hostname_and_port.substr(colon + 1);
     }
     hostname = hostname_and_port.substr(0, colon);
 
@@ -107,17 +117,29 @@ int main(int argc, char *argv[])
     }
 
     /* fork off the IRC client and GUI processes */
-    pid_t pid = fork();
+    pid = fork();
+    /* child */
     if (pid == 0)
     {
-        gui(sv[0], username, password, realname);
-    }
-    else if (pid != -1)
-    {
-        client(sv[1], hostname, port);
-        waitpid(pid, nullptr, 0);
+        try
+        {
+            client(sv[1], hostname, port);
+        } catch (std::exception &e)
+        {
+            error("client: %s", e.what());
+        }
         close(sv[0]);
         close(sv[1]);
+    }
+    /* parent */
+    else if (pid != -1)
+    {
+        struct sigaction newaction{};
+        newaction.sa_sigaction = parent_sigchldaction;
+        newaction.sa_flags = SA_NOCLDSTOP | SA_SIGINFO;
+        sigaction(SIGCHLD, &newaction, nullptr);
+
+        gui(sv[0], username, password, realname);
     }
     else
     {

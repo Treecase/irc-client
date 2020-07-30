@@ -1,9 +1,7 @@
 /* Copyright (C) 2019-2020 Trevor Last
  * See LICENSE file for copyright and license details.
- * command_responses.h
  *
  *  IRC command response callbacks
- *
  */
 
 #ifndef _COMMAND_RESPONSES_H

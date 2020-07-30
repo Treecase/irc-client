@@ -1,9 +1,7 @@
 /* Copyright (C) 2019-2020 Trevor Last
  * See LICENSE file for copyright and license details.
- * logging.h
  *
  *  Debugging/logging macros
- *
  */
 
 #ifndef _LOGGING_H
@@ -24,9 +22,9 @@ extern FILE *G_logfile;
             ##__VA_ARGS__);             \
     })
 #else
-#define debug(fmt, ...)                         \
-    ({                                          \
-        snprintf(NULL, 0, fmt, ##__VA_ARGS__);  \
+#define debug(fmt, ...)                             \
+    ({                                              \
+        snprintf(nullptr, 0, fmt, ##__VA_ARGS__);   \
     })
 #endif
 

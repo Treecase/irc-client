@@ -1,9 +1,7 @@
 /* Copyright (C) 2019-2020 Trevor Last
  * See LICENSE file for copyright and license details.
- * command_responses.c
  *
  *  IRC command response callbacks
- *
  */
 
 #include "command_responses.h"
@@ -94,7 +92,7 @@ Response *response_PART(Message cmd)
     response->type = Response::Client;
     response->str =\
         "PART "
-        + cmd.prefix->substr(0, cmd.prefix->find('!'));
+        + cmd.prefix->substr(0, cmd.prefix->find('!'))
         + " "
         + cmd.params.back();
 

@@ -1,9 +1,6 @@
 /* Copyright (C) 2019-2020 Trevor Last
  * See LICENSE file for copyright and license details.
- * gui.c
- *
  *  UI for the IRC client
- *
  */
 
 #include "../commands.h"
@@ -36,6 +33,10 @@
 struct Channel
 {
     std::set<std::string> users;
+    size_t user_list_idx;
+    size_t channel_list_idx;
+    size_t chat_log_idx;
+    std::deque<std::string> chat_log;
 };
 
 
@@ -47,13 +48,11 @@ static std::string current_channel = "";
 static std::string *G_username = nullptr;
 
 static std::unordered_map<std::string, struct Channel> channels{};
-static std::deque<std::string> chat_log{};
-static size_t user_list_idx = 0;
-static size_t chat_log_idx = 0;
 
 static WINDOW *chatw = nullptr;
 static WINDOW *inputw = nullptr;
 static WINDOW *userw = nullptr;
+static WINDOW *channelsw = nullptr;
 
 static bool resize_event = false,
             userw_hidden = true;
@@ -64,32 +63,52 @@ static std::string str_upper(std::string str);
 
 static char const PROMPT[] = "> ";
 
+static std::vector<std::string> UI_COMMANDS_HELP =
+{
+    "----- Begin Help -----",
+    "Once you've joined a channel, you can see a list",
+    "of active users by right-clicking.",
+    "",
+    "Commands:",
+    "/HELP - Get help.",
+    "/JOIN <channel> - Join a channel.",
+    "/PART [channel] - Leave current/given channel.",
+    "/QUIT [message] - Quit.",
+    "/QUOTE <command> - Pass a literal IRC command.",
+    "",
+    "For more help, try '/QUOTE HELP'",
+    "----- End of Help -----"
+};
+
 static std::unordered_map<
     std::string,
     std::function<std::string(std::string)>> UI_COMMANDS =
 {
-    {   "JOIN" ,
-        [](std::string str) {
+    {   "HELP",
+        [](std::string str)
+        {
+            for (auto &help_string : UI_COMMANDS_HELP)
+            {
+                recv_queue.push_back("NOTICE :help: " + help_string);
+            }
+            return "";
+        }
+    },
+    {   "JOIN",
+        [](std::string str)
+        {
             current_channel = str_upper(str);
             return "JOIN " + str;
         }
     },
-    {   "PART" ,
-        [](std::string str) {
+    {   "PART",
+        [](std::string str)
+        {
             if (str.empty())
             {
                 str = current_channel;
             }
-            if (channels.size() != 1)
-            {
-                current_channel = str_upper(channels.cbegin()->first);
-            }
-            else
-            {
-                channels.erase(current_channel);
-                current_channel = "";
-            }
-            return "PART " + str;
+            return "PART " + str_upper(str);
         }
     },
     {   "QUIT",
@@ -98,7 +117,12 @@ static std::unordered_map<
             return "QUIT :" + str;
         }
     },
-    { "QUOTE", [](std::string str) { return str; } },
+    {   "QUOTE",
+        [](std::string str)
+        {
+            return str;
+        }
+    },
 };
 
 
@@ -193,6 +217,11 @@ void sigwinch_handler(int sig)
     resize_event = true;
 }
 
+void curses_cleanup(void)
+{
+    endwin();
+}
+
 
 
 void gui(
@@ -209,6 +238,7 @@ void gui(
     sigaction(SIGWINCH, &act, nullptr);
 
     /* initialize ncurses */
+    atexit(curses_cleanup);
     setlocale(LC_ALL, "");
     initscr();
     start_color();
@@ -249,12 +279,16 @@ void gui(
         }
     }
 
-    chatw = newwin(LINES - 1, 0, 0, 0);
+    int channelsw_cols = std::min(20, COLS / 4);
+
+    chatw = newwin(LINES - 1, 0, 0, channelsw_cols);
     userw = nullptr;
+    channelsw = newwin(LINES - 1, channelsw_cols, 0, 0);
     inputw = newwin(1, 0, LINES-1, 0);
 
     scrollok(chatw, TRUE);
     scrollok(userw, TRUE);
+    scrollok(channelsw, TRUE);
     intrflush(inputw, FALSE);
     keypad(inputw, TRUE);
 
@@ -296,6 +330,7 @@ void gui(
                     break;
 
                 default:
+                    msg = "[" + std::to_string(num) + "]: ";
                     for (; i != message.params.end(); ++i)
                     {
                         msg += *i;
@@ -324,8 +359,31 @@ void gui(
             else if (message.command == "PART")
             {
                 auto channel = str_upper(message.params.back());
-                channels[channel].users.erase(message.params[0]);
-                msg = message.params[0] + " left";
+                auto user = message.params[0];
+                if (contains(channels, channel))
+                {
+                    if (user == *G_username)
+                    {
+                        channels.erase(channel);
+                        if (channel == current_channel)
+                        {
+                            if (channels.size() != 0)
+                            {
+                                current_channel =\
+                                    channels.cbegin()->first;
+                            }
+                            else
+                            {
+                                current_channel = "";
+                            }
+                        }
+                    }
+                    else
+                    {
+                        channels[channel].users.erase(user);
+                        msg = user + " left";
+                    }
+                }
             }
             else if (message.command == "QUIT")
             {
@@ -367,7 +425,7 @@ void gui(
 
             if (!msg.empty())
             {
-                chat_log.push_front(msg);
+                channels[current_channel].chat_log.push_front(msg);
             }
         }
         recv_queue.clear();
@@ -382,6 +440,7 @@ void gui(
             refresh();
 
             delwin(chatw);
+            delwin(channelsw);
             delwin(inputw);
             if (!userw_hidden)
             {
@@ -389,8 +448,10 @@ void gui(
             }
 
             int userw_cols = userw_hidden? 0 : std::min(20, COLS / 4);
+            int channelsw_cols = std::min(20, COLS / 4);
 
-            chatw = newwin(LINES - 1, COLS - userw_cols, 0, 0);
+            chatw = newwin(LINES - 1, COLS - userw_cols, 0, channelsw_cols);
+            channelsw = newwin(LINES - 1, channelsw_cols, 0, 0);
             inputw = newwin(1, COLS - userw_cols, LINES - 1, 0);
             if (!userw_hidden)
             {
@@ -399,6 +460,7 @@ void gui(
             }
 
             scrollok(chatw, TRUE);
+            scrollok(channelsw, TRUE);
             intrflush(inputw, FALSE);
             keypad(inputw, TRUE);
 
@@ -408,28 +470,36 @@ void gui(
         {
             delwin(chatw);
             delwin(userw);
+            delwin(channelsw);
             delwin(inputw);
 
-            chatw = newwin(LINES - 1, 0, 0, 0);
+            chatw = newwin(LINES - 1, 0, 0, channelsw_cols);
             userw = nullptr;
-            inputw = newwin(1, 0, LINES - 1, 0);
+            channelsw = newwin(LINES - 1, channelsw_cols, 0, 0);
+            inputw = newwin(1, 0, LINES-1, 0);
 
             scrollok(chatw, TRUE);
+            scrollok(channelsw, TRUE);
             intrflush(inputw, FALSE);
             keypad(inputw, TRUE);
         }
         if (!userw_hidden && userw == nullptr)
         {
             delwin(chatw);
+            delwin(channelsw);
             delwin(inputw);
 
             int userw_cols = userw_hidden? 0 : std::min(20, COLS / 4);
 
-            chatw = newwin(LINES - 1, COLS - userw_cols, 0, 0);
+            chatw = newwin(
+                LINES - 1, COLS - userw_cols - channelsw_cols,
+                0, channelsw_cols);
+            channelsw = newwin(LINES - 1, channelsw_cols, 0, 0);
             userw = newwin(0, userw_cols, 0, COLS - userw_cols - 1);
             inputw = newwin(1, COLS - userw_cols, LINES - 1, 0);
 
             scrollok(chatw, TRUE);
+            scrollok(channelsw, TRUE);
             scrollok(userw, TRUE);
             intrflush(inputw, FALSE);
             keypad(inputw, TRUE);
@@ -439,12 +509,14 @@ void gui(
         werase(chatw);
         wmove(chatw, getmaxy(chatw) - 1, 0);
         for (
-            size_t i = chat_log_idx;
-            (   i < chat_log.size()
-             && (i - chat_log_idx) < (size_t)getmaxy(chatw));
+            size_t i = channels[current_channel].chat_log_idx;
+            (   i < channels[current_channel].chat_log.size()
+                && (
+                    (i - channels[current_channel].chat_log_idx)
+                    < (size_t)getmaxy(chatw)));
             ++i)
         {
-            std::string msg = chat_log.at(i);
+            std::string msg = channels[current_channel].chat_log.at(i);
 
             /* print the received messages */
             bool bold = false,
@@ -572,7 +644,11 @@ void gui(
         {
             auto it = channels[current_channel].users.cbegin();
             auto const it_end = channels[current_channel].users.cend();
-            for (size_t i = 0; it != it_end && i < user_list_idx; ++i)
+            for (
+                size_t i = 0;
+                (   it != it_end
+                    && i < channels[current_channel].user_list_idx);
+                ++i)
             {
                 it++;
             }
@@ -590,8 +666,43 @@ void gui(
             }
         }
 
+        /* update the channel list window */
+        auto it = channels.cbegin();
+        auto const it_end = channels.cend();
+        for (
+            size_t i = 0;
+            (   it != it_end
+                && i < channels[current_channel].channel_list_idx);
+            ++i)
+        {
+            it++;
+        }
+        werase(channelsw);
+        wmove(channelsw, 0, 0);
+        for (ssize_t i = 0; i < getmaxy(channelsw); ++i)
+        {
+            if (it != it_end)
+            {
+                if (it->first == current_channel)
+                {
+                   wattr_on(channelsw, A_REVERSE, nullptr);
+                }
+                waddnstr(channelsw,
+                    it->first.c_str(),
+                    getmaxx(channelsw) - 2);
+                it++;
+               wattr_set(channelsw, A_NORMAL, 0, nullptr);
+            }
+            mvwaddch(channelsw,
+                getcury(channelsw),
+                getmaxx(channelsw) - 2,
+                ACS_VLINE);
+            wmove(channelsw, getcury(channelsw) + 1, 0);
+        }
+
         /* update the screen */
         wnoutrefresh(chatw);
+        wnoutrefresh(channelsw);
         wnoutrefresh(userw);
         wnoutrefresh(inputw);
         doupdate();
@@ -669,46 +780,91 @@ void gui(
                     }
                     else
                     {
+                        /* left click */
+                        if (event.bstate & BUTTON1_CLICKED)
+                        {
+                            if (wenclose(channelsw, event.y, event.x))
+                            {
+                                auto it = channels.cbegin();
+                                for (
+                                    int i = 0;
+                                    i < event.y;
+                                    ++i, ++it)
+                                {
+                                    if (it == channels.cend())
+                                    {
+                                        break;
+                                    }
+                                }
+
+                                if (it != channels.cend())
+                                {
+                                    current_channel = it->first;
+                                }
+                                else
+                                {
+                                    current_channel = "";
+                                }
+                            }
+                        }
+                        /* right click */
                         if (   event.bstate & BUTTON3_RELEASED
                             || event.bstate & BUTTON3_CLICKED)
                         {
                             userw_hidden = !userw_hidden;
                         }
+                        /* scroll down */
                         if (event.bstate & BUTTON4_PRESSED)
                         {
                             if (wenclose(chatw, event.y, event.x))
                             {
-                                if (  chat_log_idx + 1
-                                    < chat_log.size())
+                                if (  channels[current_channel].chat_log_idx + 1
+                                    < channels[current_channel].chat_log.size())
                                 {
-                                    chat_log_idx += 1;
+                                    channels[current_channel].chat_log_idx += 1;
+                                }
+                            }
+                            if (wenclose(channelsw, event.y, event.x))
+                            {
+                                if (channels[current_channel].channel_list_idx != 0)
+                                {
+                                    channels[current_channel].channel_list_idx -= 1;
                                 }
                             }
                             if (wenclose(userw, event.y, event.x))
                             {
-                                if (user_list_idx != 0)
+                                if (channels[current_channel].user_list_idx != 0)
                                 {
-                                    user_list_idx -= 1;
+                                    channels[current_channel].user_list_idx -= 1;
                                 }
                             }
                         }
+                        /* scroll up */
                         if (event.bstate & BUTTON5_PRESSED)
                         {
                             if (wenclose(chatw, event.y, event.x))
                             {
-                                if (chat_log_idx != 0)
+                                if (channels[current_channel].chat_log_idx != 0)
                                 {
-                                    chat_log_idx -= 1;
+                                    channels[current_channel].chat_log_idx -= 1;
+                                }
+                            }
+                            if (wenclose(channelsw, event.y, event.x))
+                            {
+                                if (  channels[current_channel].channel_list_idx + 1
+                                    < channels.size())
+                                {
+                                    channels[current_channel].channel_list_idx += 1;
                                 }
                             }
                             if (wenclose(userw, event.y, event.x))
                             {
-                                if (  user_list_idx + 1
+                                if (  channels[current_channel].user_list_idx + 1
                                     < channels[
                                         current_channel
                                         ].users.size())
                                 {
-                                    user_list_idx += 1;
+                                    channels[current_channel].user_list_idx += 1;
                                 }
                             }
                         }
@@ -759,7 +915,7 @@ void gui(
     }
 
     close(client_socket.fd);
-    endwin();
+    curses_cleanup();
     debug("finished");
 }
 

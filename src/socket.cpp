@@ -1,9 +1,7 @@
 /* Copyright (C) 2019-2020 Trevor Last
  * See LICENSE file for copyright and license details.
- * socket.cpp
  *
  *  Class for queued Unix socket
- *
  */
 
 #include "socket.h"

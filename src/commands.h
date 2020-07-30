@@ -1,9 +1,7 @@
 /* Copyright (C) 2019-2020 Trevor Last
  * See LICENSE file for copyright and license details.
- * commands.h
  *
  *  Data structures/constants dealing with IRC commands
- *
  */
 
 #ifndef _COMMANDS_H

@@ -1,10 +1,8 @@
 /* Copyright (C) 2019-2020 Trevor Last
  * See LICENSE file for copyright and license details.
- * socket.h
  *
  *  Socket with attached queue.
  *  IMPORTANT: The file descriptor is *shared* between copies!
- *
  */
 
 #ifndef _SOCKET_H
