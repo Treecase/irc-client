@@ -1,10 +1,10 @@
 # See LICENSE file for copyright and license details.
 
-VERSION=0.3.0
+VERSION=0.4.0
 DEBUG=1
 
 CXXFLAGS=-Wall -Wextra -g
-LDFLAGS=-lpanel -lncurses
+LDFLAGS=-lncurses
 EXTRA=-D VERSION=\"$(VERSION)\" -D DEBUG_LEVEL=$(DEBUG)
 
 
@@ -50,5 +50,4 @@ $(DEPDIR) :
 .PHONY: clean
 clean:
 	@rm -f irc $(OBJ) $(DEP)
-
 

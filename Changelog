@@ -1,4 +1,12 @@
 
+2020-july-30  Trevor Last  <trevorclast@gmail.com>
+
+Version 0.4.0. Each joined channel has a tab on the left side of the screen.
+You can view a channel by left clicking on its name. Additionally, you can use
+the /HELP command to get help with the commands.
+
+
+
 2020-may-29  Trevor Last  <trevorclast@gmail.com>
 
 Version 0.3.0. Rewritten in C++. In this version, typed input is interpreted
