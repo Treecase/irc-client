@@ -11,6 +11,7 @@ Commands are prefixed by a forward slash, any other input is interpreted as a
 message to the current channel.
 
 Commands are:
+* `HELP` -- Get help
 * `JOIN <channel>` -- Join channel
 * `PART <channel>` -- Leave channel
 * `QUIT [message]` -- Quit IRC (with an optional quit message)

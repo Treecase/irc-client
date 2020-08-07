@@ -146,6 +146,7 @@ static std::string str_upper(std::string str)
     std::string newstr = str;
     for (char &ch : newstr)
     {
+        /* in IRC, these symbols have uppercase versions */
         switch (ch)
         {
         case '{':
@@ -171,10 +172,10 @@ static std::string str_upper(std::string str)
 
 void input_handler(std::string line)
 {
-    /* lines starting with a '/' are commands,
-     * so just strip the slash and send the command */
     if (!line.empty())
     {
+        /* lines starting with a '/' are commands,
+         * so just strip the slash and send the command */
         if (line[0] == '/')
         {
             auto cmd = str_upper(line.substr(1, line.find(' ') - 1));
@@ -196,6 +197,7 @@ void input_handler(std::string line)
                 error("unknown command '%s'", cmd.c_str());
             }
         }
+        /* if the line isn't a command, send it as a message */
         else
         {
             send_queue.push_back(
@@ -310,19 +312,24 @@ void gui(
             std::string msg = "";
             if (message.command == "NUMERIC")
             {
-                auto i = message.params.begin();
-                long num = strtol((*i++).c_str(), nullptr, 10);
+                auto it = message.params.cbegin();
+                char *endptr = nullptr;
+                long num = strtol(it->c_str(), &endptr, 10);
+                if (endptr == it->c_str())
+                {
+                    debug("bad numeric: %s", std::string{message}.c_str());
+                }
+                it++;
 
                 switch (num)
                 {
                 case RPL_NAMREPLY:
                   {
-                    i++;    /* '=', '*', or '@' */
-                    std::string channel = str_upper(*i++);
-
-                    for (; i != message.params.end(); ++i)
+                    it++;
+                    std::string channel = str_upper(*it++);
+                    for (; it != message.params.cend(); ++it)
                     {
-                        channels[channel].users.insert(*i);
+                        channels[channel].users.insert(*it);
                     }
                   } break;
 
@@ -330,14 +337,10 @@ void gui(
                     break;
 
                 default:
-                    msg = "[" + std::to_string(num) + "]: ";
-                    for (; i != message.params.end(); ++i)
+                    msg = "[" + std::to_string(num) + "]:";
+                    for (; it != message.params.cend(); ++it)
                     {
-                        msg += *i;
-                        if (i + 1 != message.params.end())
-                        {
-                            msg += " ";
-                        }
+                        msg += " " + *it;
                     }
                     break;
                 }
@@ -434,6 +437,7 @@ void gui(
             break;
         }
 
+        /* terminal window resized */
         if (resize_event)
         {
             endwin();
@@ -466,6 +470,7 @@ void gui(
 
             resize_event = false;
         }
+        /* redraw the screen, since the user window was hidden */
         if (userw_hidden && userw != nullptr)
         {
             delwin(chatw);
@@ -483,6 +488,7 @@ void gui(
             intrflush(inputw, FALSE);
             keypad(inputw, TRUE);
         }
+        /* redraw the screen, since the user window was unhidden */
         if (!userw_hidden && userw == nullptr)
         {
             delwin(chatw);
@@ -508,17 +514,15 @@ void gui(
         /* update the chat window */
         werase(chatw);
         wmove(chatw, getmaxy(chatw) - 1, 0);
+        bool done = false;
         for (
             size_t i = channels[current_channel].chat_log_idx;
-            (   i < channels[current_channel].chat_log.size()
-                && (
-                    (i - channels[current_channel].chat_log_idx)
-                    < (size_t)getmaxy(chatw)));
+            i < channels[current_channel].chat_log.size() && !done;
             ++i)
         {
-            std::string msg = channels[current_channel].chat_log.at(i);
+            std::string fullmsg =\
+                channels[current_channel].chat_log[i];
 
-            /* print the received messages */
             bool bold = false,
                  italic = false,
                  reverse = false,
@@ -526,112 +530,132 @@ void gui(
             char fg[3] = {0,0,0},
                  bg[3] = {0,0,0};
 
-            for (size_t i = 0; i < msg.size(); ++i)
+            for (
+                ssize_t line = fullmsg.size() / getmaxx(chatw);
+                line >= 0;
+                --line)
             {
-                switch (msg[i])
+                if (getcury(chatw) == 0)
                 {
-                case 0x02:  /* ^B */
-                    bold = !bold;
-                    break;
+                    done = true;
+                }
+                std::string msg =\
+                    fullmsg.substr(
+                        getmaxx(chatw) * line,
+                        getmaxx(chatw));
 
-                case 0x03:  /* ^C */
-                    /* colour */
-                    if (isdigit(msg[i+1]))
+                /* print the received messages */
+                for (size_t i = 0; i < msg.size(); ++i)
+                {
+                    switch (msg[i])
                     {
-                        fg[0] = msg[++i];
+                    case 0x02:  /* ^B */
+                        bold = !bold;
+                        break;
+
+                    case 0x03:  /* ^C */
+                        /* colour */
                         if (isdigit(msg[i+1]))
                         {
-                            fg[1] = msg[++i];
-                        }
-                        if (msg[i+1] == ',')
-                        {
-                            i++;
+                            fg[0] = msg[++i];
                             if (isdigit(msg[i+1]))
                             {
-                                bg[0] = msg[++i];
+                                fg[1] = msg[++i];
+                            }
+                            if (msg[i+1] == ',')
+                            {
+                                i++;
                                 if (isdigit(msg[i+1]))
                                 {
-                                    bg[1] = msg[++i];
+                                    bg[0] = msg[++i];
+                                    if (isdigit(msg[i+1]))
+                                    {
+                                        bg[1] = msg[++i];
+                                    }
+                                }
+                                else
+                                {
+                                    i--;
                                 }
                             }
-                            else
-                            {
-                                i--;
-                            }
                         }
-                    }
-                    else
-                    {
+                        else
+                        {
+                            fg[0] = 0;
+                            fg[1] = 0;
+                            bg[0] = 0;
+                            bg[1] = 0;
+                        }
+                        break;
+
+                    case 0x0F:  /* ^O */
+                        /* clear formatting */
+                        bold = false;
+                        italic = false;
+                        reverse = false;
+                        underline = false;
                         fg[0] = 0;
                         fg[1] = 0;
                         bg[0] = 0;
                         bg[1] = 0;
-                    }
-                    break;
+                        break;
 
-                case 0x0F:  /* ^O */
-                    /* clear formatting */
-                    bold = false;
-                    italic = false;
-                    reverse = false;
-                    underline = false;
-                    fg[0] = 0;
-                    fg[1] = 0;
-                    bg[0] = 0;
-                    bg[1] = 0;
-                    break;
+                    case 0x16:  /* ^R */
+                        reverse = !reverse;
+                        break;
 
-                case 0x16:  /* ^R */
-                    reverse = !reverse;
-                    break;
+                    case 0x1D:  /* ^I */
+                        italic = !italic;
+                        break;
 
-                case 0x1D:  /* ^I */
-                    italic = !italic;
-                    break;
+                    case 0x1F:  /* ^U */
+                        underline = !underline;
+                        break;
 
-                case 0x1F:  /* ^U */
-                    underline = !underline;
-                    break;
+                    default:
+                      {
+                        wattr_set(chatw, A_NORMAL, 0, nullptr);
+                        attr_t attrs = 0;
+                        if (bold)
+                        {
+                            attrs |= A_BOLD;
+                        }
+                        if (italic)
+                        {
+                            attrs |= A_ITALIC;
+                        }
+                        if (reverse)
+                        {
+                            attrs |= A_REVERSE;
+                        }
+                        if (underline)
+                        {
+                            attrs |= A_UNDERLINE;
+                        }
+                        wattr_on(chatw, attrs, nullptr);
 
-                default:
-                  {
-                    wattr_set(chatw, A_NORMAL, 0, nullptr);
-                    attr_t attrs = 0;
-                    if (bold)
-                    {
-                        attrs |= A_BOLD;
+                        if (fg[0] != 0)
+                        {
+                            int fore = strtol(fg, nullptr, 10),
+                                back =\
+                                    (bg[0] == 0?
+                                        1
+                                        : strtol(bg, nullptr, 10));
+                            wcolor_set(chatw, (back * 16) + fore, nullptr);
+                        }
+                        if (getcurx(chatw) + 1 < getmaxx(chatw))
+                        {
+                            waddch(chatw, msg[i]);
+                        }
+                      } break;
                     }
-                    if (italic)
-                    {
-                        attrs |= A_ITALIC;
-                    }
-                    if (reverse)
-                    {
-                        attrs |= A_REVERSE;
-                    }
-                    if (underline)
-                    {
-                        attrs |= A_UNDERLINE;
-                    }
-                    wattr_on(chatw, attrs, nullptr);
-
-                    if (fg[0] != 0)
-                    {
-                        int fore = strtol(fg, nullptr, 10),
-                            back =\
-                                (bg[0] == 0?
-                                    1
-                                    : strtol(bg, nullptr, 10));
-                        wcolor_set(chatw, (back * 16) + fore, nullptr);
-                    }
-                    if (getcurx(chatw) + 1 < getmaxx(chatw))
-                    {
-                        waddch(chatw, msg[i]);
-                    }
-                  } break;
                 }
+                if (getcury(chatw) - 1 < 0)
+                {
+                    break;
+                }
+                wmove(chatw, getcury(chatw) - 1, 0);
             }
-            wmove(chatw, getcury(chatw) - 1, 0);
         }
 
         /* update the input window */
@@ -756,7 +780,6 @@ void gui(
                 case KEY_ENTER:
                     input_handler(input_line);
                     input_line = "";
-                    break;
                     break;
 
                 case '\t':

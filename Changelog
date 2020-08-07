@@ -1,4 +1,12 @@
 
+2020-august-7  Trevor Last  <trevorclast@gmail.com>
+
+Version 0.5.0. Long messages wrap around instead of being cut off. In this
+update, the program also handles incoming messages being split over multiple
+recvs.
+
+
+
 2020-july-30  Trevor Last  <trevorclast@gmail.com>
 
 Version 0.4.0. Each joined channel has a tab on the left side of the screen.

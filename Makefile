@@ -1,6 +1,6 @@
 # See LICENSE file for copyright and license details.
 
-VERSION=0.4.0
+VERSION=0.5.0
 DEBUG=1
 
 CXXFLAGS=-Wall -Wextra -g

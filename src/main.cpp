@@ -1,6 +1,5 @@
 /* Copyright (C) 2020 Trevor Last
  * See LICENSE file for copyright and license details.
- *
  *  IRC
  */
 

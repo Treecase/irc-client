@@ -1,6 +1,5 @@
 /* Copyright (C) 2019-2020 Trevor Last
  * See LICENSE file for copyright and license details.
- *
  *  A Simple IRC Client
  */
 
@@ -90,7 +89,9 @@ void client(
 {
     /* open a socket to the IRC server */
     QueuedSocket tcp_socket{get_tcp_socket(hostname, port)};
+    std::string tcp_unfinished_msg = "";
 
+    /* open a socket to the GUI client */
     QueuedSocket client_socket{fd};
 
     std::deque<std::string> irc_read{};
@@ -238,15 +239,18 @@ void client(
                     size_t msg_end = data.find("\r\n", msg_start);
                     if (msg_end != std::string::npos)
                     {
-                        std::string msg = data.substr(
-                            msg_start,
-                            msg_end - msg_start);
+                        tcp_unfinished_msg +=\
+                            data.substr(
+                                msg_start,
+                                msg_end - msg_start);
 
-                        irc_read.push_back(msg);
+                        irc_read.push_back(tcp_unfinished_msg);
+                        tcp_unfinished_msg = "";
                         msg_start = msg_end + 2;
                     }
                     else
                     {
+                        tcp_unfinished_msg += data.substr(msg_start);
                         break;
                     }
                 }
