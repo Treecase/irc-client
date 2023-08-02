@@ -1,169 +1,154 @@
-/* Copyright (C) 2020 Trevor Last
+/* Copyright (C) 2020, 2023 Trevor Last
  * See LICENSE file for copyright and license details.
- *  IRC
  */
 
-#define LOGFILE G_logfile
-#include "data.h"
-#include "logging.h"
+#include "args.hpp"
+#include "MainLoop.hpp"
 
-#include <unistd.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include <irc/IRCClient.hpp>
+#include <util/sockets.hpp>
+#include <util/debug.hpp>
+#include <Frontend.hpp>
 
-#include <cstdio>
-#include <cstdlib>
-#include <cerrno>
-#include <csignal>
+#include <unistd.h>     // STDIN_FILENO
 
-#include <memory>
+#include <iostream>
 
 
-/* print usage info */
-static void usage(char const *name, bool long_version);
-
-/* the IRC client process */
-void client(
-    int fd,
-    std::string hostname,
-    std::string port);
-
-/* the GUI process */
-void gui(
-    int fd,
-    std::string username,
-    std::string password,
-    std::string realname);
-
-
-/* declared in data.h */
-char const *CLIENT_NAME = nullptr;
-
-/* declared in logging.h */
-FILE *G_logfile = nullptr;
-
-
-static pid_t pid = 0;
-
-
-/* atexit callback */
-void cleanup_func(void)
+/** Called by MainLoop when STDIN has some input for us. */
+bool stdin_cb(FDStateFlags events, Frontend &frontend)
 {
-    if (G_logfile != nullptr)
+    if (events & FDState::ERROR)
+        return true;
+    if (events & FDState::READ)
+        return frontend.input();
+    return false;
+}
+
+
+/** Called by IRCClient when it has messages ready to be recieved. */
+void frontend_recieve_messages(Frontend &frontend, IRCClient &client)
+{
+    while (!client.is_recieve_queue_empty())
     {
-        fclose(G_logfile);
-        G_logfile = nullptr;
-    }
-    if (pid != 0)
-    {
-        kill(pid, SIGTERM);
+        auto const msg = client.pop();
+        frontend.process_message(msg);
     }
 }
 
-/* SIGCHLD handler */
-void parent_sigchldaction(int sig, siginfo_t *info, void *ucontext)
+
+/** Called by MainLoop to get poll() event argument for the IRC socket. */
+FDStateFlags irc_getmonitor(IRCClient &client)
 {
-    exit(info->si_status);
+    if (!client.is_send_queue_empty())
+        return FDState::READ | FDState::WRITE;
+    else
+        return FDState::READ;
 }
 
+
+/** Called by MainLoop when the IRC socket has input/can be written to. */
+bool irc_cb(FDStateFlags events, int fd, IRCClient &client)
+{
+    if (events & FDState::ERROR)
+    {
+        return true;
+    }
+    if (events & FDState::READ)
+    {
+        auto const data = read_socket(fd);
+
+        auto d2 = data;
+        while (d2.find("\r\n") != std::string::npos)
+        {
+            auto const msg = Message::parse(d2);
+            debugstream << "RECV: " << msg << std::endl;
+        }
+
+        if (data.size() == 0)
+            return true;
+        else
+            client.recieve(data);
+    }
+    if (events & FDState::WRITE)
+    {
+        auto const data = client.send();
+
+        auto d2 = data;
+        while (d2.find("\r\n") != std::string::npos)
+        {
+            auto const msg = Message::parse(d2);
+            debugstream << "SEND: " << msg << std::endl;
+        }
+
+        write_socket(fd, data);
+    }
+    return false;
+}
+
+
+/** Called when the frontend has a message to be sent over IRC. */
+void on_frontend_input_available(Message const &message, IRCClient &client)
+{
+    client.push(message);
+}
 
 
 int main(int argc, char *argv[])
 {
-    atexit(cleanup_func);
+    auto const config = parse_args(argc, argv);
 
-    CLIENT_NAME = argv[0];
-    G_logfile = fopen((std::string(CLIENT_NAME) + ".log").c_str(), "w");
+    auto const irc_socket = get_tcp_socket(config.hostname, config.port);
 
-    if (argc == 2)
-    {
-        if (   std::string(argv[1]) == "--help"
-            || std::string(argv[1]) == "-h")
-        {
-            usage(argv[0], true);
-        }
-    }
-    if (argc != 4 && argc != 5)
-    {
-        usage(argv[0], false);
-        exit(EXIT_FAILURE);
-    }
+    IRCClient irc_client{};
+    Frontend frontend{};
 
-    std::string hostname = argv[1],
-                port     = "6667";
+    // Notify the frontend when the client recieves an IRC message.
+    irc_client.signal_message_recieved.connect(
+        std::bind(
+            frontend_recieve_messages,
+            std::ref(frontend),
+            std::ref(irc_client)));
 
-    std::string username = argv[2],
-                password = argv[3],
-                realname = (argc == 5? argv[4] : "realname");
+    // Send frontend input to the client.
+    frontend.signal_input_available.connect(
+        std::bind(
+            on_frontend_input_available,
+            std::placeholders::_1,
+            std::ref(irc_client)));
 
-    /* get the hostname and port number */
-    std::string hostname_and_port = argv[1];
-    size_t colon = hostname_and_port.rfind(':');
-    if (colon != std::string::npos)
-    {
-        port = hostname_and_port.substr(colon + 1);
-    }
-    hostname = hostname_and_port.substr(0, colon);
+    // Preload the IRC login process.
+    irc_client.push("PASS " + config.password);
+    irc_client.push("NICK " + config.username);
+    irc_client.push("USER " + config.username + " 0 * :" + config.realname);
 
+    MainLoop mainloop{};
 
-    /* set up sockets for the IRC client and GUI to communicate */
-    int sv[2] = { -1, -1 };
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == -1)
-    {
-        perror("socketpair");
-        exit(EXIT_FAILURE);
-    }
+    // stdin monitor.
+    mainloop.add_fd(STDIN_FILENO);
+    mainloop.set_get_monitor_fn(
+        STDIN_FILENO,
+        [](){return FDState::READ;});
+    mainloop.signal_on_polled(STDIN_FILENO).connect(
+        [&frontend](auto events){return stdin_cb(events, frontend);});
+    mainloop.signal_on_closed(STDIN_FILENO).connect(
+        [irc_socket](){close(irc_socket);});
 
-    /* fork off the IRC client and GUI processes */
-    pid = fork();
-    /* child */
-    if (pid == 0)
-    {
-        try
-        {
-            client(sv[1], hostname, port);
-        } catch (std::exception &e)
-        {
-            error("client: %s", e.what());
-        }
-        close(sv[0]);
-        close(sv[1]);
-    }
-    /* parent */
-    else if (pid != -1)
-    {
-        struct sigaction newaction{};
-        newaction.sa_sigaction = parent_sigchldaction;
-        newaction.sa_flags = SA_NOCLDSTOP | SA_SIGINFO;
-        sigaction(SIGCHLD, &newaction, nullptr);
+    // IRC socket monitor.
+    mainloop.add_fd(irc_socket);
+    mainloop.set_get_monitor_fn(
+        irc_socket,
+        std::bind(irc_getmonitor, std::ref(irc_client)));
+    mainloop.signal_on_polled(irc_socket).connect(
+        std::bind(
+            irc_cb,
+            std::placeholders::_1,
+            irc_socket,
+            std::ref(irc_client)));
+    mainloop.signal_on_closed(irc_socket).connect(
+        [&mainloop](){mainloop.remove_fd(STDIN_FILENO);});
 
-        gui(sv[0], username, password, realname);
-    }
-    else
-    {
-        perror("fork");
-        exit(EXIT_FAILURE);
-    }
+    mainloop.run();
 
     return EXIT_SUCCESS;
 }
-
-void usage(char const *name, bool long_version)
-{
-    printf("Usage: %s HOSTNAME[:PORT] USERNAME PASSWORD [REALNAME]\n",
-        name);
-    if (long_version)
-    {
-        printf((
-        "Connect to the IRC server on HOSTNAME:PORT\n"
-        "Example: %s irc.example.com:1234 coolguy secret\n"
-        "If unspecified, PORT is 6667 and REALNAME is 'realname'.\n"
-        ), name);
-    }
-    else
-    {
-        printf("Try '%s --help' for more information.\n", name);
-    }
-}
-

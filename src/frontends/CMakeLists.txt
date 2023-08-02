@@ -1,0 +1,2 @@
+add_subdirectory(frontend-terminal)
+add_subdirectory(frontend-ncurses)

@@ -1,5 +1,12 @@
 
-2020-august-7  Trevor Last  <trevorclast@gmail.com>
+2023-august-02  Trevor Last  <trevorclast@gmail.com>
+
+Version 0.6.0. Major rewrite. Roughly feature-equal with the previous
+version.
+
+
+
+2020-august-07  Trevor Last  <trevorclast@gmail.com>
 
 Version 0.5.0. Long messages wrap around instead of being cut off. In this
 update, the program also handles incoming messages being split over multiple

@@ -1,0 +1,13 @@
+/* Copyright (C) 2023 Trevor Last
+ * See LICENSE file for copyright and license details.
+ */
+
+#ifndef IRCC_CONFIG_HPP
+#define IRCC_CONFIG_HPP
+
+
+#define IRCC_NAME "@PROJECT_NAME@"
+#define IRCC_VERSION "@PROJECT_VERSION@"
+
+
+#endif

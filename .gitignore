@@ -1,6 +1,4 @@
-irc
-notes/
-src/dep
-src/obj
+/.vscode/
+/build/
+/notes/
 *.log
-*.swp
