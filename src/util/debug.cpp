@@ -2,14 +2,6 @@
  * See LICENSE file for copyright and license details.
  */
 
-#ifndef UTIL_DEBUG_HPP
-#define UTIL_DEBUG_HPP
-
-
-#include <fstream>
-
+#include "util/debug.hpp"
 
 std::ofstream debugstream{"ircc.log"};
-
-
-#endif

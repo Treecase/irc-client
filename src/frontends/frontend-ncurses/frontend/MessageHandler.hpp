@@ -5,7 +5,7 @@
 #ifndef FRONTENDNCURSES_MESSAGEHANDLER_HPP
 #define FRONTENDNCURSES_MESSAGEHANDLER_HPP
 
-#include <Interactions.hpp>
+#include <Backend.hpp>
 #include <irc/Message.hpp>
 
 #include <lua.hpp>
@@ -49,8 +49,10 @@ class FrontendMessageHandler
 
 public:
     FrontendMessageHandler();
-    /** Execute the handler for `msg`. */
-    std::shared_ptr<Interaction> execute(Frontend *f, Message const &msg);
+    /**
+     * Execute the command handler for `msg`. Handlers may update the backend.
+     */
+    void execute(Backend &b, Message const &msg);
 };
 
 

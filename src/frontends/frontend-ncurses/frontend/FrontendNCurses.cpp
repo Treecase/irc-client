@@ -5,12 +5,14 @@
 #include "Frontend.hpp"
 
 #include <util/debug.hpp>
+#include <util/strings.hpp>
 
-#include <clocale>
 #include <cctype>
+#include <clocale>
 
 
 Frontend::Frontend()
+:   _message_handler{new FrontendMessageHandler{}}
 {
     setlocale(LC_ALL, "");
     initscr();
@@ -62,10 +64,41 @@ bool Frontend::input()
         case KEY_MOUSE:{
             MEVENT event;
             getmouse(&event);
-            if (event.bstate & BUTTON4_PRESSED)
-                _backend.get_active_channel().scroll_up(1);
-            if (event.bstate & BUTTON5_PRESSED)
-                _backend.get_active_channel().scroll_down(1);
+            if (wenclose(_main, event.y, event.x))
+            {
+                if (event.bstate & BUTTON4_PRESSED)
+                    _backend.get_active_channel().scroll_up(1);
+                if (event.bstate & BUTTON5_PRESSED)
+                    _backend.get_active_channel().scroll_down(1);
+            }
+            if (wenclose(_channelw, event.y, event.x))
+            {
+                if (event.bstate & BUTTON4_PRESSED)
+                {
+                    _channels_offset = (
+                        _channels_offset == 0? 0 : _channels_offset - 1);
+                }
+                if (event.bstate & BUTTON5_PRESSED)
+                {
+                    _channels_offset = std::min(
+                        _channels_offset + 1,
+                        _backend.get_channels().size());
+                }
+            }
+            if (wenclose(_userw, event.y, event.x))
+            {
+                if (event.bstate & BUTTON4_PRESSED)
+                {
+                    _users_offset = (
+                        _users_offset == 0? 0 : _users_offset - 1);
+                }
+                if (event.bstate & BUTTON5_PRESSED)
+                {
+                    _users_offset = std::min(
+                        _users_offset + 1,
+                        _backend.get_active_channel().get_users().size());
+                }
+            }
             break;}
 
         default:
@@ -81,9 +114,7 @@ bool Frontend::input()
 
 void Frontend::process_message(Message const &msg)
 {
-    auto const interaction = _message_handler.execute(this, msg);
-    if (interaction)
-        interaction->execute(_backend);
+    _message_handler->execute(_backend, msg);
     _draw();
 }
 
@@ -97,7 +128,7 @@ std::string Frontend::clip(std::string const &string, size_t width)
             normalized.push_back(ch);
 
     auto clipped = normalized.substr(0, width);
-    if (normalized.size() >= width)
+    if (normalized.size() > width)
         clipped.back() = '-';
 
     return clipped;
@@ -123,19 +154,31 @@ void Frontend::_draw_channels()
     getmaxyx(_channelw, height, width);
 
     werase(_channelw);
+    wattrset(_channelw, A_NORMAL);
 
     // Border
     for (int y = 0; y < height; ++y)
         mvwaddch(_channelw, y, width-1, ACS_VLINE);
     mvwaddch(_channelw, height-2, width-1, ACS_LTEE);
 
-    mvwaddstr(_channelw, 0, 0, "CHANNELS");
+    // Title
+    mvwaddstr(_channelw, 0, 0, clip("CHANNELS", width-1).c_str());
+
+    auto const &active = _backend.get_active_channel();
     auto const channels = _backend.get_channels();
     auto it = channels.cbegin();
-    for (int i = 0; it != channels.cend() && i < height; ++i, ++it)
+
+    for (size_t i = 0; i < _channels_offset && it != channels.cend(); ++i)
+        it++;
+
+    for (int y = 0; y < height && it != channels.cend(); ++y, ++it)
     {
-        auto const str = clip(it->first, width);
-        mvwaddstr(_channelw, 1+i, 0, str.c_str());
+        if (it->second.name == active.name)
+            wattrset(_channelw, A_REVERSE);
+        else
+            wattrset(_channelw, A_NORMAL);
+        auto const str = clip(it->second.name, width-1);
+        mvwaddstr(_channelw, 1+y, 0, str.c_str());
     }
 }
 
@@ -157,10 +200,14 @@ void Frontend::_draw_main()
 
     while (it != scrollback.crend() && y <= height)
     {
-        auto msg = *it;
-        msg.prefix.reset();
-        auto const str = clip(msg, width);
-        mvwaddstr(_main, height - y, 0, str.c_str());
+        wmove(_main, height - y, 0);
+        for (auto const ch : *it)
+        {
+            if (getcurx(_main)+1 > width)
+                break;
+            if (isprint(ch))
+                waddch(_main, ch);
+        }
 
         it++;
         y++;
@@ -174,17 +221,25 @@ void Frontend::_draw_users()
     int const width = getmaxx(_userw);
     int const height = getmaxy(_userw);
 
+    // Border
     werase(_userw);
     for (int y = 0; y < height; ++y)
         mvwaddch(_userw, y, 0, ACS_VLINE);
     mvwaddch(_userw, height-2, 0, ACS_RTEE);
 
-    mvwaddstr(_userw, 0, 1, "USERS");
-    auto it = active.get_users().cbegin();
-    for (int i = 0; it != active.get_users().cend() && i < height; ++i, ++it)
+    // Title
+    mvwaddstr(_userw, 0, 1, clip("USERS", width-1).c_str());
+
+    auto const users = active.get_users();
+    auto it = users.cbegin();
+
+    for (size_t i = 0; i < _users_offset && it != users.cend(); ++i)
+        it++;
+
+    for (int y = 0; y < height && it != users.cend(); ++y, ++it)
     {
         auto const str = clip(*it, width-1);
-        mvwaddstr(_userw, 1+i, 1, str.c_str());
+        mvwaddstr(_userw, 1+y, 1, str.c_str());
     }
 }
 
@@ -217,7 +272,45 @@ void Frontend::_handle_user_input(std::string const &line)
         return;
 
     if (line.at(0) != '/')
-        signal_input_available.emit(Message{"PRIVMSG target :" + line});
+    {
+        auto const channel = _backend.get_active_channel().name;
+        signal_input_available.emit("PRIVMSG " + channel + " :" + line);
+    }
     else
-        signal_input_available.emit(Message{line.substr(1)});
+    {
+        auto const cmd = line.substr(1);
+        auto const cmdL = lowercase(cmd);
+        if (cmdL == "reload")
+        {
+            _message_handler.reset(new FrontendMessageHandler{});
+            debugstream << "=== scripts reloaded" << std::endl;
+            for (auto &kv : _backend.get_channels())
+            {
+                auto channel = kv.second;
+                channel.push_message("=== scripts reloaded ===");
+            }
+        }
+        else if (cmdL.find("channel") == 0)
+        {
+            auto const i = cmd.rfind(' ');
+            if (i == std::string::npos)
+            {
+                _backend.get_active_channel().push_message(
+                    "=== /channel: missing channel name");
+                return;
+            }
+
+            auto const arg = cmd.substr(i+1);
+            try {
+                _backend.set_active_channel(arg);
+            } catch (std::out_of_range const &e) {
+                _backend.get_active_channel().push_message(
+                    "=== /channel: channel '" + arg + "' does not exist");
+            }
+        }
+        else
+        {
+            signal_input_available.emit(Message{cmd});
+        }
+    }
 }

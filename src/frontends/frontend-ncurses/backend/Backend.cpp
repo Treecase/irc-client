@@ -8,18 +8,19 @@
 Backend::Backend()
 {
     _channels.emplace("", "<base>");
+    _active_channel = &_channels.at("");
 }
 
 
 void Backend::set_active_channel(std::string const &channel)
 {
-    _active_channel = channel;
+    _active_channel = &_channels.at(channel);
 }
 
 
 Channel &Backend::get_active_channel()
 {
-    return _channels.at(_active_channel);
+    return *_active_channel;
 }
 
 

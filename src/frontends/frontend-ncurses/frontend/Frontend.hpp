@@ -43,7 +43,10 @@ private:
     std::string _buffer{};
 
     Backend _backend{};
-    FrontendMessageHandler _message_handler{};
+    std::unique_ptr<FrontendMessageHandler> _message_handler;
+
+    size_t _channels_offset{0};
+    size_t _users_offset{0};
 
     WINDOW *_channelw{nullptr};
     WINDOW *_main{nullptr};

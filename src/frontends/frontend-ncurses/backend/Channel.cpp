@@ -13,7 +13,7 @@ Channel::Channel(std::string const &name)
 }
 
 
-void Channel::push_message(Message const &msg)
+void Channel::push_message(std::string const &msg)
 {
     if (scrollback_offset != 0)
         scrollback_offset += 1;

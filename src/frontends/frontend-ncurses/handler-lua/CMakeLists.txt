@@ -1,6 +1,7 @@
 add_library(handler-lua STATIC
+    LuaBackend.cpp
+    LuaChannel.cpp
     LuaMessage.cpp
-    LuaInteractions.cpp
 )
 target_link_libraries(handler-lua
     PUBLIC

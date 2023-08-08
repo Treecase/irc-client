@@ -18,7 +18,7 @@
 class Channel
 {
     std::set<std::string> users{};
-    std::vector<Message> scrollback{};
+    std::vector<std::string> scrollback{};
     size_t scrollback_offset{0};
 
 public:
@@ -27,7 +27,7 @@ public:
     Channel(std::string const &name);
 
     /** Add a message to the scrollback. */
-    void push_message(Message const &msg);
+    void push_message(std::string const &msg);
 
     /** Scrollback buffer up. */
     void scroll_up(size_t lines);

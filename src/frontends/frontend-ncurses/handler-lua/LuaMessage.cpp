@@ -10,7 +10,7 @@
 
 
 /**
- * Message.new(string) -> IRC.Message
+ * Message.new(src: String) -> IRC.Message
  *
  * Construct a new IRC.Message from a string.
  * Raises an error if the string is not a valid IRC message.
@@ -19,20 +19,20 @@ static int message_new(lua_State *L);
 
 static int message_dunder_tostring(lua_State *L);
 /**
- * Message:prefix() -> string|nil
+ * Message:prefix() -> String|nil
  *
  * Get the Message's prefix.
  */
 static int message__prefix(lua_State *L);
 /**
- * Message:command() -> string
+ * Message:command() -> String
  *
  * Get the Message's command.
  */
 static int message__command(lua_State *L);
 /**
- * 1. Message:params() -> array[string]
- * 2. Message:params(int) -> string
+ * 1. Message:params() -> array[String]
+ * 2. Message:params(idx: int) -> String
  *
  * 1. Get the Message's parameter list.
  * 2. Get the Message's Nth parameter.
@@ -40,12 +40,12 @@ static int message__command(lua_State *L);
 static int message__params(lua_State *L);
 
 
-static const luaL_Reg messagelib_f[] = {
+static const luaL_Reg backendlib_f[] = {
     {"new", message_new},
     {nullptr, nullptr}
 };
 
-static const luaL_Reg messagelib_m[] = {
+static const luaL_Reg backendlib_m[] = {
     {"__tostring", message_dunder_tostring},
     {"prefix", message__prefix},
     {"command", message__command},
@@ -60,10 +60,10 @@ int luaopen_message(lua_State *L)
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
 
-    luaL_setfuncs(L, messagelib_m, 0);
+    luaL_setfuncs(L, backendlib_m, 0);
     lua_pop(L, 1);
 
-    luaL_newlib(L, messagelib_f);
+    luaL_newlib(L, backendlib_f);
     return 1;
 }
 

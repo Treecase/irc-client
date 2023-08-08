@@ -5,20 +5,12 @@
 #include "Frontend.hpp"
 
 #include <util/debug.hpp>
-#include <LuaInteractions.hpp>
+#include <util/strings.hpp>
+#include <LuaBackend.hpp>
+#include <LuaChannel.hpp>
 #include <LuaMessage.hpp>
 
 #include <cctype>
-
-
-/** Convert a string to lowercase. */
-static std::string lowercase(std::string const &str)
-{
-    std::string out{};
-    for (unsigned char ch : str)
-        out.push_back(std::tolower(ch));
-    return out;
-}
 
 
 /** Replacement Lua `print` function. Outputs to `debugstream` instead. */
@@ -48,8 +40,9 @@ FrontendMessageHandler::FrontendMessageHandler()
     luaL_openlibs(L);
 
     luaL_requiref(L, "Message", luaopen_message, 1);
-    luaL_requiref(L, "Interaction", luaopen_interaction, 1);
-    lua_pop(L, 2);
+    luaL_requiref(L, "Backend", luaopen_backend, 1);
+    luaL_requiref(L, "Channel", luaopen_channel, 1);
+    lua_pop(L, 3);
 
     lua_newtable(L);
     lua_setglobal(L, "IRC");
@@ -61,28 +54,25 @@ FrontendMessageHandler::FrontendMessageHandler()
 }
 
 
-std::shared_ptr<Interaction>
-FrontendMessageHandler::execute(Frontend *f, Message const &msg)
+void FrontendMessageHandler::execute(Backend &b, Message const &msg)
 {
-    std::shared_ptr<Interaction> result{nullptr};
-    int irc_T = lua_getglobal(L, "IRC");
-    lua_assert(irc_T == LUA_TTABLE);
     auto const cmd = lowercase(msg.command);
-    int fn_T = lua_getfield(L, -1, cmd.c_str());
-    if (fn_T == LUA_TFUNCTION)
-    {
-        lua_pushmessage(L, msg);
-        _guard(lua_pcall(L, 1, 1, 0));
-        if (!lua_isnil(L, -1))
-            result = luaL_checkinteraction(L, -1);
+    auto const pre = lua_gettop(L);
+
+    lua_getglobal(L, "IRC");
+    lua_getfield(L, -1, cmd.c_str());
+
+    lua_pushbackend(L, b);
+    lua_pushmessage(L, msg);
+    try {
+        _guard(lua_pcall(L, 2, 0, 0));
     }
-    else
-    {
-        lua_pop(L, 1);
-        result = std::make_shared<PrintInteraction>(msg);
+    catch (std::runtime_error const &e) {
+        debugstream << "!!Error in '" << cmd << "' handler: " << e.what()
+            << std::endl;
+        b.get_active_channel().push_message(msg);
     }
-    lua_pop(L, 1);
-    return result;
+    lua_pop(L, lua_gettop(L) - pre);
 }
 
 
